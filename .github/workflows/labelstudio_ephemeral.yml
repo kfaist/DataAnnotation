@@ -52,17 +52,70 @@ jobs:
           pid=$(echo "$pj" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
 
           # seed 5 tasks
-          cat > tasks.json <<'JSON'
-          [{"data":{"text":"AI art wins an award at a major festival."}},
-           {"data":{"text":"Nonprofit launches an AI tool for grant review."}},
-           {"data":{"text":"Backlash grows over AI-generated illustrations."}},
-           {"data":{"text":"New dataset supports accessibility research."}},
-           {"data":{"text":"Artists demand better consent controls for training."}}]
-          JSON
-          curl -fsS -X POST "$base/api/projects/$pid/tasks/bulk" -H "Authorization: Token $token" \
-            -H 'Content-Type: application/json' --data-binary @tasks.json >/dev/null
+        set -euo pipefail
+        base="http://127.0.0.1:8080"
+        email="admin@test.local"
+        pass="TempPass!123"
+        # Wait up to 180s for Label Studio to be up
 
-          echo "token=$token" >> $GITHUB_OUTPUT
+        for i in {1..90}; do
+          if curl -fsS "$base/" >/dev/null 2>&1; then
+            echo "Label Studio healthy"; break
+          fi
+          sleep 2
+        done
+        # Signup (ignore non-2xx; log status)
+
+        echo "Signup..."
+        scode=$(curl -sS -o /dev/null -w "%{http_code}" \
+        -X POST "$base/user/signup" -H 'Content-Type: application/json' \
+        -d "{\"email\":\"$email\",\"password\":\"$pass\"}") || true
+        echo "signup status=$scode"
+        # Login (no --fail); capture Set-Cookie case-insensitively
+
+        echo "Login..."
+        resp=$(curl -sS -i -X POST "$base/user/login" -H 'Content-Type: application/json' \
+        -d "{\"email\":\"$email\",\"password\":\"$pass\"}")
+        echo "$resp" | sed -n '1,40p'
+        cookie=$(echo "$resp" | awk 'BEGIN{IGNORECASE=1} /^set-cookie:/ {print $2}' | tr -d '\r' | head -n1 | cut -d';' -f1)
+        if [ -z "${cookie:-}" ]; then
+          echo "ERROR: no session cookie returned from login"
+          exit 1
+        fi
+        # Create API token
+
+        token_json=$(curl -sS -X POST "$base/api/users/me/tokens" -H "Cookie: $cookie" \
+        -H 'Content-Type: application/json' -d '{"name":"ci"}')
+        token=$(echo "$token_json" | sed -n 's/."key":"\([^"]\+\)".*/\1/p')
+        if [ -z "${token:-}" ]; then
+          echo "ERROR: token creation failed: $token_json"
+          exit 1
+        fi
+        # Create simple text/choices project
+
+        cfg='<View><Text name="text" value="$text"/><Choices name="label" toName="text" choice="single" required="true"><Choice value="Positive"/><Choice value="Negative"/></Choices></View>'
+        pj=$(curl -sS -X POST "$base/api/projects" -H "Authorization: Token $token" -H 'Content-Type: application/json' \
+        -d "{\"title\":\"CI Demo\",\"label_config\":\"$cfg\"}")
+        pid=$(echo "$pj" | sed -n 's/.*"id":\([0-9]\+\).*/\1/p')
+        if [ -z "${pid:-}" ]; then
+          echo "ERROR: could not extract project id: $pj"
+          exit 1
+        fi
+        # Seed 5 tasks
+
+        cat > tasks.json <<'JSON'
+        [{"data":{"text":"AI art wins an award at a major festival."}},
+        {"data":{"text":"Nonprofit launches an AI tool for grant review."}},
+        {"data":{"text":"Backlash grows over AI-generated illustrations."}},
+        {"data":{"text":"New dataset supports accessibility research."}},
+        {"data":{"text":"Artists demand better consent controls for training."}}]
+        JSON
+        curl -sS -X POST "$base/api/projects/$pid/tasks/bulk" -H "Authorization: Token $token" \
+        -H 'Content-Type: application/json' --data-binary @tasks.json >/dev/null
+
+        echo "token=$token" >> $GITHUB_OUTPUT
+        echo "pid=$pid" >> $GITHUB_OUTPUT
+        echo "base=$base" >> $GITHUB_OUTPUT
           echo "pid=$pid" >> $GITHUB_OUTPUT
           echo "base=$base" >> $GITHUB_OUTPUT
 

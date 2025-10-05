@@ -1,3 +1,6 @@
+permissions:
+  contents: write
+  pull-requests: write
 name: Assistant Bootstrap
 on:
   workflow_dispatch:

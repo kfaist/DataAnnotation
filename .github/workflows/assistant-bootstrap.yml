@@ -1,0 +1,24 @@
+name: Assistant Bootstrap
+on:
+  workflow_dispatch:
+jobs:
+  bootstrap:
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare changes
+        run: |
+          mkdir -p .github/assistant
+          echo "Assistant bootstrap $(date -u)" > .github/assistant/BOOTSTRAP.md
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.secret }}
+          branch: assistant/bootstrap
+          base: main
+          title: "Assistant bootstrap"
+          commit-message: "assistant: bootstrap"
+          body: "Initial bootstrap by workflow."

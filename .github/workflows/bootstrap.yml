@@ -1,2 +1,0 @@
-- name: Use Coding Gent Token
-  run: echo "The Coding Gent token is ${{ secrets.CODING_GENT_TOKEN }}"

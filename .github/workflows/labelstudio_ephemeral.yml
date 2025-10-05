@@ -1,0 +1,175 @@
+name: LabelStudio Ephemeral Demo
+on:
+  workflow_dispatch:
+    inputs:
+      assist_mode:
+        description: "Preview only (no submit)"
+        type: boolean
+        default: true
+      max_submissions:
+        description: "Cap submissions when assist_mode=false"
+        type: number
+        default: 3
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Label Studio (Docker)
+        run: |
+          docker run -d --name ls -p 8080:8080 heartexlabs/label-studio:latest
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then echo "Label Studio is up"; break; fi
+            sleep 2
+          done
+
+      - name: Seed admin and project
+        id: seed
+        run: |
+ 
+
+  
+        set -euo pipefail
+        base="http://127.0.0.1:8080"
+        email="admin@test.local"
+        pass="TempPass!123"
+        # Wait up to 180s for Label Studio to be up
+
+        for i in {1..90}; do
+          if curl -fsS "$base/" >/dev/null 2>&1; then
+            echo "Label Studio healthy"; break
+          fi
+          sleep 2
+        done
+        # Signup (ignore non-2xx; log status)
+
+        echo "Signup..."
+        scode=$(curl -sS -o /dev/null -w "%{http_code}" \
+        -X POST "$base/user/signup" -H 'Content-Type: application/json' \
+        -d "{\"email\":\"$email\",\"password\":\"$pass\"}") || true
+        echo "signup status=$scode"
+        # Login (no --fail); capture Set-Cookie case-insensitively
+
+        echo "Login..."
+        resp=$(curl -sS -i -X POST "$base/user/login" -H 'Content-Type: application/json' \
+        -d "{\"email\":\"$email\",\"password\":\"$pass\"}")
+        echo "$resp" | sed -n '1,40p'
+        cookie=$(echo "$resp" | awk 'BEGIN{IGNORECASE=1} /^set-cookie:/ {print $2}' | tr -d '\r' | head -n1 | cut -d';' -f1)
+        if [ -z "${cookie:-}" ]; then
+          echo "ERROR: no session cookie returned from login"
+          exit 1
+        fi
+        # Create API token
+
+        token_json=$(curl -sS -X POST "$base/api/users/me/tokens" -H "Cookie: $cookie" \
+        -H 'Content-Type: application/json' -d '{"name":"ci"}')
+        token=$(echo "$token_json" | sed -n 's/."key":"\([^"]\+\)".*/\1/p')
+        if [ -z "${token:-}" ]; then
+          echo "ERROR: token creation failed: $token_json"
+          exit 1
+        fi
+        # Create simple text/choices project
+
+        cfg='<View><Text name="text" value="$text"/><Choices name="label" toName="text" choice="single" required="true"><Choice value="Positive"/><Choice value="Negative"/></Choices></View>'
+        pj=$(curl -sS -X POST "$base/api/projects" -H "Authorization: Token $token" -H 'Content-Type: application/json' \
+        -d "{\"title\":\"CI Demo\",\"label_config\":\"$cfg\"}")
+        pid=$(echo "$pj" | sed -n 's/.*"id":\([0-9]\+\).*/\1/p')
+        if [ -z "${pid:-}" ]; then
+          echo "ERROR: could not extract project id: $pj"
+          exit 1
+        fi
+        # Seed 5 tasks
+
+        cat > tasks.json <<'JSON'
+        [{"data":{"text":"AI art wins an award at a major festival."}},
+        {"data":{"text":"Nonprofit launches an AI tool for grant review."}},
+        {"data":{"text":"Backlash grows over AI-generated illustrations."}},
+        {"data":{"text":"New dataset supports accessibility research."}},
+        {"data":{"text":"Artists demand better consent controls for training."}}]
+        JSON
+        curl -sS -X POST "$base/api/projects/$pid/tasks/bulk" -H "Authorization: Token $token" \
+        -H 'Content-Type: application/json' --data-binary @tasks.json >/dev/null
+
+        echo "token=$token" >> $GITHUB_OUTPUT
+        echo "pid=$pid" >> $GITHUB_OUTPUT
+        echo "base=$base" >> $GITHUB_OUTPUT
+          echo "pid=$pid" >> $GITHUB_OUTPUT
+          echo "base=$base" >> $GITHUB_OUTPUT
+
+      - name: Annotate via REST
+        env:
+          BASE: ${{ steps.seed.outputs.base }}
+          TOKEN: ${{ steps.seed.outputs.token }}
+          PID: ${{ steps.seed.outputs.pid }}
+          ASSIST: ${{ inputs.assist_mode }}
+          MAX_SUB: ${{ inputs.max_submissions }}
+        run: |
+          python - <<'PY'
+          import os, json, time, random, requests, pathlib
+          base = os.environ["BASE"]
+          tok  = os.environ["TOKEN"]
+          pid  = int(os.environ["PID"])
+          assist = os.environ.get("ASSIST","true").lower()=="true"
+          max_sub = int(os.environ.get("MAX_SUB","3"))
+
+          s = requests.Session()
+          s.headers["Authorization"] = f"Token {tok}"
+
+          # discover tasks
+          r = s.get(f"{base}/api/projects/{pid}/tasks", params={"page_size":100}, timeout=30)
+          r.raise_for_status()
+          data = r.json()
+          tasks = data.get("results", data) if isinstance(data, dict) else data
+          tasks = tasks[:50]
+
+          def choose(text):
+            t = (text or "").lower()
+            return "Positive" if any(k in t for k in ["win","award","launch","support"]) else "Negative"
+
+          stats = {
+            "name":"labelstudio-ephemeral",
+            "login_ok": True,
+            "project_id": pid,
+            "tasks_discovered": len(tasks),
+            "tasks_prefilled": 0,
+            "submissions_attempted": 0,
+            "submissions_succeeded": 0,
+            "errors":[]
+          }
+
+          for t in tasks:
+            tid = t["id"]
+            text = t.get("data",{}).get("text","")
+            choice = choose(text)
+            payload = {
+              "result":[
+                {"from_name":"label","to_name":"text","type":"choices","value":{"choices":[choice]}}
+              ]
+            }
+            stats["tasks_prefilled"] += 1
+            if not assist and stats["submissions_attempted"] < max_sub:
+              try:
+                rr = s.post(f"{base}/api/tasks/{tid}/annotations", json=payload, timeout=30)
+                stats["submissions_attempted"] += 1
+                if rr.ok:
+                  stats["submissions_succeeded"] += 1
+                else:
+                  stats["errors"].append(f"submit {tid}: {rr.status_code}")
+                time.sleep(0.5 + random.random()*0.5)
+              except Exception as e:
+                stats["errors"].append(f"submit {tid}: {e}")
+
+          out = pathlib.Path("artifacts")
+          out.mkdir(parents=True, exist_ok=True)
+          with open(out/"labelstudio-summary.json","w",encoding="utf-8") as f:
+            json.dump(stats,f,indent=2)
+          print(json.dumps(stats,indent=2))
+          PY
+
+      - name: Upload summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: labelstudio-ephemeral-summary
+          path: artifacts/labelstudio-summary.json

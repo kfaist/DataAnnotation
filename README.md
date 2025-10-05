@@ -1,25 +1,36 @@
-MCP Annotation Agent (GitHub Actions + Playwright)
+# MCP Repo
 
-What it does
-- Logs into supported annotation portals via UI automation (Playwright).
-- Discovers active projects; prioritizes work; falls back to qualifications.
-- Runs up to 5 hours daily; outputs a JSON daily summary.
+## Daily automation (default: **no external platforms**)
 
-Quick start
-1) Add repository secrets (Settings > Secrets and variables > Actions):
-   - APPEN_EMAIL, APPEN_PASSWORD
-   - TOLOKA_EMAIL, TOLOKA_PASSWORD
-2) Adjust schedule in .github/workflows/mcp.yml (cron is UTC).
-3) First runs are dry-run + assist mode (no submissions). Set runtime.dry_run=false to enable real actions.
+This repository includes a GitHub Actions workflow (`.github/workflows/mcp_daily.yml`) that can be run on a schedule or manually via **workflow_dispatch**.
 
-Local dry run (optional)
-- python -m venv .venv && source .venv/bin/activate
-- pip install -r requirements.txt
-- python -m playwright install --with-deps
-- export APPEN_EMAIL=... APPEN_PASSWORD=... TOLOKA_EMAIL=... TOLOKA_PASSWORD=...
-- python mcp/main.py
+**Defaults**
+- No external platforms are enabled by default.
+- When `PLATFORMS` is empty (the default) or contains only invalid keys, the run succeeds and writes a JSON summary at `daily_summaries/summary-<timestamp>.json` with:
+  - `platforms_enabled: 0`
+  - `skipped_reason: "no platforms configured"`
+  - `per_platform: []`
+  - `invalid_platforms: [...]`
+  - and echoes `DRY_RUN` and `ASSIST_MODE`.
 
-Notes
-- UI selectors in adapters are placeholders; adjust to your portals’ DOM.
-- If 2FA is enforced, use a self-hosted runner or persist Playwright storage_state via workflow artifact (already configured).
-- Respect ToS. Keep assist_mode=true unless you have explicit permission for auto-submission.
+**Manual run (workflow_dispatch)**
+- Inputs
+  - `dry_run` (boolean, default `false`)
+  - `assist_mode` (boolean, default `true`)
+  - `PLATFORMS` (string, default `""` = none)
+
+**Artifacts**
+- Each run uploads `daily_summaries/*.json` as an artifact named `daily_summaries`.
+
+## Enabling future platform adapters
+1. Implement an adapter (e.g., under `mcp/adapters/<platform>.py`) and register its key in `SUPPORTED_PLATFORMS` inside `mcp/main.py` (or add a discovery/registry mechanism).
+2. Provide any credentials in the job steps for that adapter (as repository/organization secrets or environment variables).
+3. Trigger a run with `PLATFORMS` set to a comma-separated list of enabled adapter keys (e.g., `PLATFORMS="example1,example2"`).
+
+> Note: All `APPEN_*` and `TOLOKA_*` secret references have been removed from the default workflow. Adapters that require credentials should add their own environment/secret usage locally within their steps.
+
+---
+
+## Test Plan and Acceptance Criteria
+Include this Test Plan and Acceptance Criteria verbatim:
+[paste your test plan and criteria]

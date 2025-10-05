@@ -1,6 +1,6 @@
 runtime:
   max_daily_hours: 5
-  dry_run: true
+  dry_run: false
   assist_mode: true
   max_errors_before_pause: 5
   human_delay_ms: [300, 1800]

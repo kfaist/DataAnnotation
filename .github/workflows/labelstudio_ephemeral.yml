@@ -28,30 +28,9 @@ jobs:
       - name: Seed admin and project
         id: seed
         run: |
-          set -euo pipefail
-          base="http://127.0.0.1:8080"
-          email="admin@test.local"
-          pass="TempPass!123"
+ 
 
-          # create or login user
-          curl -fsS -X POST "$base/user/signup" -H 'Content-Type: application/json' \
-            -d "{\"email\":\"$email\",\"password\":\"$pass\"}" || true
-          session=$(curl -fsS -i -X POST "$base/user/login" -H 'Content-Type: application/json' \
-            -d "{\"email\":\"$email\",\"password\":\"$pass\"}" | awk -F': ' '/set-cookie/ {print $2}' | tr -d '\r')
-          cookie=$(echo "$session" | cut -d';' -f1)
-
-          # create API token
-          token_json=$(curl -fsS -X POST "$base/api/users/me/tokens" -H "Cookie: $cookie" \
-            -H 'Content-Type: application/json' -d '{"name":"ci"}')
-          token=$(echo "$token_json" | sed -n 's/.*"key":"\([^"\"]*\)".*/\1/p')
-
-          # create simple text/choices project
-          cfg='<View><Text name="text" value="$text"/><Choices name="label" toName="text" choice="single" required="true"><Choice value="Positive"/><Choice value="Negative"/></Choices></View>'
-          pj=$(curl -fsS -X POST "$base/api/projects" -H "Authorization: Token $token" -H 'Content-Type: application/json' \
-            -d "{\"title\":\"CI Demo\",\"label_config\":\"$cfg\"}")
-          pid=$(echo "$pj" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
-
-          # seed 5 tasks
+  
         set -euo pipefail
         base="http://127.0.0.1:8080"
         email="admin@test.local"

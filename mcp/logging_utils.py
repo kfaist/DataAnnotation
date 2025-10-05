@@ -11,11 +11,12 @@ class DailySummary:
     def add_reasoning(self, msg: str):
         self.reasoning_steps.append(msg)
 
-    def add_action(self, project, task_type, samples_annotated, notes=None):
+    def add_action(self, project, task_type, samples_annotated, notes=None, attempted=None):
         self.annotation_actions.append({
             "project": project,
             "task_type": task_type,
             "samples_annotated": int(samples_annotated),
+            "attempted": int(attempted if attempted is not None else samples_annotated),
             "notes": notes or ""
         })
 

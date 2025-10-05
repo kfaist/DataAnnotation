@@ -1,0 +1,28 @@
+runtime:
+  max_daily_hours: 5
+  dry_run: true
+  assist_mode: true
+  max_errors_before_pause: 5
+  human_delay_ms: [300, 1800]
+
+strategy:
+  prioritize_deadlines_within_days: 5
+  per_project_cap: 500
+  review_first: true
+  fallback_to_qualifications: true
+
+platforms:
+  appen:
+    enabled: true
+    base_url: https://connect.appen.com
+    headless: true
+    daily_cap: 400
+  toloka:
+    enabled: true
+    base_url: https://toloka.ai
+    headless: true
+    daily_cap: 400
+
+logging:
+  log_dir: ./logs
+  export_daily_json: ./daily_summaries

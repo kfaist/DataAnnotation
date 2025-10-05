@@ -1,0 +1,27 @@
+name: Bootstrap MCP Repo
+on:
+  workflow_dispatch:
+    inputs:
+      cron:
+        description: "Cron schedule (UTC)"
+        required: false
+        default: "5 9 * * *"
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Write scaffold
+        run: bash bootstrap_mcp.sh
+      - name: Set schedule cron
+        run: |
+          sed -i "s/SCHEDULE_CRON_PLACEHOLDER/${{ github.event.inputs.cron }}/g" .github/workflows/mcp.yml
+      - name: Commit scaffold
+        run: |
+          git add .
+          git commit -m "Bootstrap MCP scaffold" || echo "Nothing to commit"
+          git push

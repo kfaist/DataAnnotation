@@ -37,7 +37,7 @@ jobs:
           TOLOKA_EMAIL: ${{ secrets.TOLOKA_EMAIL }}
           TOLOKA_PASSWORD: ${{ secrets.TOLOKA_PASSWORD }}
         run: |
-          python -c "import mcp.main as m; m.__name__='__main__'; exec(open('mcp/main.py').read())"
+           python -m mcp.main
 
       - name: Upload daily summary
         uses: actions/upload-artifact@v4

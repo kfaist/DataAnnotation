@@ -19,7 +19,7 @@ jobs:
       - name: Create pull request
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ SECRET.secret }}
+          token: ${{ secrets.SECRET }}
           branch: assistant/bootstrap
           base: main
           title: "Assistant bootstrap"
